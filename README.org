@@ -1,4 +1,4 @@
 # calisp
 Clone of MAL (Make A Lisp) with non standard functions
 
-![https://github.com/WesterWest/calisp/workflows/Rust/badge.svg]
+[[https://github.com/WesterWest/calisp/workflows/Rust/badge.svg]]
