@@ -1,8 +1,11 @@
 [package]
 name = "calisp"
+description = "MAL clone, lisp language"
 version = "0.1.0"
 authors = ["Jáchym Tomášek <jachym.tomasek@tutanota.com>"]
 edition = "2018"
+license = "MPL v2.0"
+license-file = "LICENSE"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
