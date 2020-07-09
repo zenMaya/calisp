@@ -1,1 +1,5 @@
 /target
+*~
+.calisp-history
+
+**/*.rs.bk
