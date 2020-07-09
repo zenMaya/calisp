@@ -1,6 +1,6 @@
+use fnv::FnvHashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
-use fnv::FnvHashMap;
 
 use crate::types::CalispErr::ErrString;
 use crate::types::CalispVal::{List, Nil, Sym, Vector};
@@ -21,7 +21,11 @@ pub fn env_new(outer: Option<Env>) -> Env {
     })
 }
 
-pub fn env_bind(outer: Option<Env>, mbinds: CalispVal, exprs: Vec<CalispVal>) -> Result<Env, CalispErr> {
+pub fn env_bind(
+    outer: Option<Env>,
+    mbinds: CalispVal,
+    exprs: Vec<CalispVal>,
+) -> Result<Env, CalispErr> {
     let env = env_new(outer);
     match mbinds {
         List(binds, _) | Vector(binds, _) => {
@@ -54,13 +58,13 @@ pub fn env_get(env: &Env, key: &CalispVal) -> CalispRet {
     match key {
         Sym(ref s) => match env_find(env, s) {
             Some(e) => Ok(e
-                          .data
-                          .borrow()
-                          .get(s)
-                          .ok_or(ErrString(format!("'{}' not found", s)))?
-                          .clone()),
+                .data
+                .borrow()
+                .get(s)
+                .ok_or(ErrString(format!("'{}' not found", s)))?
+                .clone()),
             _ => error(&format!("'{}' not found", s)),
-        }
+        },
         _ => error("Env.get called with non-Str"),
     }
 }

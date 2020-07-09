@@ -11,8 +11,12 @@ use rustyline::Editor;
 use crate::printer::pr_seq;
 use crate::reader::read_str;
 use crate::types::CalispErr::ErrCalispVal;
-use crate::types::CalispVal::{Atom, Bool, Func, Hash, Int, List, CalispFunc, Nil, Str, Sym, Vector};
-use crate::types::{CalispArgs, CalispRet, CalispVal, _assoc, _dissoc, atom, error, func, hash_map};
+use crate::types::CalispVal::{
+    Atom, Bool, CalispFunc, Func, Hash, Int, List, Nil, Str, Sym, Vector,
+};
+use crate::types::{
+    CalispArgs, CalispRet, CalispVal, _assoc, _dissoc, atom, error, func, hash_map,
+};
 
 macro_rules! fn_t_int_int {
     ($ret:ident, $fn:expr) => {{
@@ -57,21 +61,19 @@ fn readline(a: CalispArgs) -> CalispRet {
     }
 
     match a[0] {
-        Str(ref p) => {
-            match RL.lock().unwrap().readline(p) {
-                Ok(mut line) => {
-                    if line.ends_with('\n') {
+        Str(ref p) => match RL.lock().unwrap().readline(p) {
+            Ok(mut line) => {
+                if line.ends_with('\n') {
+                    line.pop();
+                    if line.ends_with('\r') {
                         line.pop();
-                        if line.ends_with('\r') {
-                            line.pop();
-                        }
                     }
-                    Ok(Str(line))
                 }
-                Err(ReadlineError::Eof) => Ok(Nil),
-                Err(e) => error(&format!("{:?}", e)),
+                Ok(Str(line))
             }
-        }
+            Err(ReadlineError::Eof) => Ok(Nil),
+            Err(e) => error(&format!("{:?}", e)),
+        },
         _ => error("readline: prompt is not Str"),
     }
 }
@@ -140,7 +142,7 @@ fn vals(a: CalispArgs) -> CalispRet {
     }
 }
 
-fn cons (a: CalispArgs) -> CalispRet {
+fn cons(a: CalispArgs) -> CalispRet {
     match a[1].clone() {
         List(v, _) | Vector(v, _) => {
             let mut new_v = vec![a[0].clone()];
@@ -162,7 +164,6 @@ fn concat(a: CalispArgs) -> CalispRet {
     Ok(list!(new_v.to_vec()))
 }
 
-
 fn nth(a: CalispArgs) -> CalispRet {
     match (a[0].clone(), a[1].clone()) {
         (List(seq, _), Int(idx)) | (Vector(seq, _), Int(idx)) => {
@@ -175,7 +176,6 @@ fn nth(a: CalispArgs) -> CalispRet {
     }
 }
 
-
 fn first(a: CalispArgs) -> CalispRet {
     match a[0].clone() {
         List(ref seq, _) | Vector(ref seq, _) if seq.len() == 0 => Ok(Nil),
@@ -185,7 +185,7 @@ fn first(a: CalispArgs) -> CalispRet {
     }
 }
 
-fn rest (a: CalispArgs) -> CalispRet {
+fn rest(a: CalispArgs) -> CalispRet {
     match a[0].clone() {
         List(ref seq, _) | Vector(ref seq, _) => {
             if seq.len() > 1 {
@@ -193,7 +193,7 @@ fn rest (a: CalispArgs) -> CalispRet {
             } else {
                 Ok(list![])
             }
-        },
+        }
         Nil => Ok(list![]),
         _ => error("invalid args to cdr (rest)"),
     }
@@ -252,6 +252,17 @@ fn seq(a: CalispArgs) -> CalispRet {
     }
 }
 
+fn exit(a: CalispArgs) -> CalispRet {
+    if a.len() == 0 {
+        std::process::exit(0)
+    } else {
+        match a[0] {
+            Int(code) => std::process::exit(code as i32),
+            _ => error("exit not valid exit code"),
+        }
+    }
+}
+
 pub fn ns() -> Vec<(&'static str, CalispVal)> {
     vec![
         ("=", func(|a| Ok(Bool(a[0] == a[1])))),
@@ -284,7 +295,7 @@ pub fn ns() -> Vec<(&'static str, CalispVal)> {
         (
             "prn",
             func(|a| {
-                println!("{}", pr_seq(&a,true, "", "", " "));
+                println!("{}", pr_seq(&a, true, "", "", " "));
                 Ok(Nil)
             }),
         ),
@@ -340,5 +351,6 @@ pub fn ns() -> Vec<(&'static str, CalispVal)> {
         ("deref", func(|a| a[0].deref())),
         ("reset!", func(|a| a[0].reset_bang(&a[1]))),
         ("swap!", func(|a| a[0].swap_bang(&a[1..].to_vec()))),
+        ("exit", func(exit)),
     ]
 }

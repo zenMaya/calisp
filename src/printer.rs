@@ -1,5 +1,7 @@
 use crate::types::CalispVal;
-use crate::types::CalispVal::{Atom, Bool, Func, Hash, Int, List, CalispFunc, Nil, Str, Sym, Vector};
+use crate::types::CalispVal::{
+    Atom, Bool, CalispFunc, Func, Hash, Int, List, Nil, Str, Sym, Vector,
+};
 
 fn escape_str(s: &str) -> String {
     s.chars()
@@ -35,7 +37,7 @@ impl CalispVal {
             Hash(hm, _) => {
                 let l: Vec<CalispVal> = hm
                     .iter()
-                    .flat_map(|(k,v)| vec![Str(k.to_string()), v.clone()])
+                    .flat_map(|(k, v)| vec![Str(k.to_string()), v.clone()])
                     .collect();
                 pr_seq(&l, print_readably, "{", "}", " ")
             }

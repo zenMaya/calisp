@@ -1,11 +1,13 @@
-use std::cell::RefCell;
-use std::rc::Rc;
 use fnv::FnvHashMap;
 use itertools::Itertools;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::env::{env_bind, Env};
 use crate::types::CalispErr::{ErrCalispVal, ErrString};
-use crate::types::CalispVal::{Atom, Bool, Func, Hash, Int, List, CalispFunc, Nil, Str, Sym, Vector};
+use crate::types::CalispVal::{
+    Atom, Bool, CalispFunc, Func, Hash, Int, List, Nil, Str, Sym, Vector,
+};
 
 #[derive(Debug, Clone)]
 pub enum CalispVal {
@@ -28,7 +30,6 @@ pub enum CalispVal {
     },
     Atom(Rc<RefCell<CalispVal>>),
 }
-
 
 #[derive(Debug)]
 pub enum CalispErr {
@@ -164,7 +165,7 @@ impl CalispVal {
         }
     }
 
-     pub fn with_meta(&mut self, new_meta: &CalispVal) -> CalispRet {
+    pub fn with_meta(&mut self, new_meta: &CalispVal) -> CalispRet {
         match self {
             List(_, ref mut meta)
             | Vector(_, ref mut meta)
@@ -176,7 +177,7 @@ impl CalispVal {
             _ => return error("with-meta not supported by type"),
         };
         Ok(self.clone())
-     }
+    }
 }
 
 impl PartialEq for CalispVal {

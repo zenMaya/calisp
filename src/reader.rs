@@ -15,17 +15,17 @@ impl Reader {
     fn next(&mut self) -> Result<String, CalispErr> {
         self.pos = self.pos + 1;
         Ok(self
-           .tokens
-           .get(self.pos -1)
-           .ok_or(ErrString("underflow".to_string()))?
-           .to_string())
+            .tokens
+            .get(self.pos - 1)
+            .ok_or(ErrString("underflow".to_string()))?
+            .to_string())
     }
     fn peek(&self) -> Result<String, CalispErr> {
         Ok(self
-           .tokens
-           .get(self.pos)
-           .ok_or(ErrString("underflow".to_string()))?
-           .to_string())
+            .tokens
+            .get(self.pos)
+            .ok_or(ErrString("underflow".to_string()))?
+            .to_string())
     }
 }
 
@@ -135,7 +135,7 @@ fn read_form(rdr: &mut Reader) -> CalispRet {
         }
         ")" => error("unexpected ')'"),
         "(" => read_seq(rdr, ")"),
-         "]" => error("unexpected ']'"),
+        "]" => error("unexpected ']'"),
         "[" => read_seq(rdr, "]"),
         "}" => error("unexpected '}'"),
         "{" => read_seq(rdr, "}"),

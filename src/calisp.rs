@@ -1,4 +1,5 @@
 #![allow(non_snake_case)]
+#![allow(dead_code)]
 
 use std::rc::Rc;
 
@@ -10,29 +11,33 @@ extern crate lazy_static;
 extern crate fnv;
 extern crate itertools;
 extern crate regex;
-    
 extern crate rustyline;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 #[macro_use]
+#[path = "types.rs"]
 mod types;
 use crate::types::CalispErr::{ErrCalispVal, ErrString};
-use crate::types::CalispVal::{Bool, Func, Hash, List, CalispFunc, Nil, Str, Sym, Vector};
+use crate::types::CalispVal::{Bool, CalispFunc, Func, Hash, List, Nil, Str, Sym, Vector};
 use crate::types::{error, format_error, CalispArgs, CalispErr, CalispRet, CalispVal};
+#[path = "env.rs"]
 mod env;
+#[path = "printer.rs"]
 mod printer;
+#[path = "reader.rs"]
 mod reader;
 use crate::env::{env_bind, env_find, env_get, env_new, env_set, env_sets, Env};
 #[macro_use]
+#[path = "core.rs"]
 mod core;
 
-// read
+/// Read function for reading plain text and parsing it into AST
 fn read(str: &str) -> CalispRet {
     reader::read_str(str.to_string())
 }
 
-// eval
+/// Handle quasiquotes `\``
 fn quasiquote(ast: &CalispVal) -> CalispVal {
     match ast {
         List(ref v, _) | Vector(ref v, _) if v.len() > 0 => {
@@ -64,12 +69,13 @@ fn quasiquote(ast: &CalispVal) -> CalispVal {
     }
 }
 
+/// Check if call is macro call
 fn is_macro_call(ast: &CalispVal, env: &Env) -> Option<(CalispVal, CalispArgs)> {
     match ast {
         List(v, _) => match v[0] {
             Sym(ref s) => match env_find(env, s) {
                 Some(e) => match env_get(&e, &v[0]) {
-                    Ok(f @ CalispFunc { is_macro: true, .. }) => Some ((f, v[1..].to_vec())),
+                    Ok(f @ CalispFunc { is_macro: true, .. }) => Some((f, v[1..].to_vec())),
                     _ => None,
                 },
                 _ => None,
@@ -80,18 +86,20 @@ fn is_macro_call(ast: &CalispVal, env: &Env) -> Option<(CalispVal, CalispArgs)> 
     }
 }
 
+/// Expand macro
 fn macroexpand(mut ast: CalispVal, env: &Env) -> (bool, CalispRet) {
     let mut was_expanded = false;
     while let Some((mf, args)) = is_macro_call(&ast, env) {
         ast = match mf.apply(args) {
             Err(e) => return (false, Err(e)),
-            Ok(a) => a
+            Ok(a) => a,
         };
         was_expanded = true;
     }
-   (was_expanded, Ok(ast))
+    (was_expanded, Ok(ast))
 }
 
+/// Evaluate AST
 fn eval_ast(ast: &CalispVal, env: &Env) -> CalispRet {
     match ast {
         Sym(_) => Ok(env_get(&env, &ast)?),
@@ -101,14 +109,14 @@ fn eval_ast(ast: &CalispVal, env: &Env) -> CalispRet {
                 lst.push(eval(a.clone(), env.clone())?)
             }
             Ok(list!(lst))
-        },
+        }
         Vector(v, _) => {
             let mut lst: CalispArgs = vec![];
             for a in v.iter() {
                 lst.push(eval(a.clone(), env.clone())?)
             }
             Ok(vector!(lst))
-        },
+        }
         Hash(hm, _) => {
             let mut new_hm: FnvHashMap<String, CalispVal> = FnvHashMap::default();
             for (k, v) in hm.iter() {
@@ -119,7 +127,9 @@ fn eval_ast(ast: &CalispVal, env: &Env) -> CalispRet {
         _ => Ok(ast.clone()),
     }
 }
-        
+
+/// Evaluate
+/// This function loops through the whole AST and evaluates every expression accordingly
 fn eval(mut ast: CalispVal, mut env: Env) -> CalispRet {
     let ret: CalispRet;
 
@@ -228,9 +238,9 @@ fn eval(mut ast: CalispVal, mut env: Env) -> CalispRet {
                             }
                         }
                         res => res,
-                    }
+                    },
                     Sym(ref a0sym) if a0sym == "do" => {
-                        match eval_ast(&list!(l[1..l.len() -1].to_vec()), &env)? {
+                        match eval_ast(&list!(l[1..l.len() - 1].to_vec()), &env)? {
                             List(_, _) => {
                                 ast = l.last().unwrap_or(&Nil).clone();
                                 continue 'tco;
@@ -305,43 +315,67 @@ fn eval(mut ast: CalispVal, mut env: Env) -> CalispRet {
     ret
 }
 
-//print
+/// Print the result from output AST
 fn print(ast: &CalispVal) -> String {
     ast.pr_str(true)
 }
 
+/// This function is called when text needs to be evaluated
+/// Calls [`read`]
+/// Then [`eval`]
+/// And lastly [`print`]
 fn rep(str: &str, env: &Env) -> Result<String, CalispErr> {
     let ast = read(str)?;
     let exp = eval(ast, env.clone())?;
     Ok(print(&exp))
-}                
+}
 
-fn main() {
-    let mut args = std::env::args();
-    let arg1 = args.nth(1);
-    
-    let mut rl = Editor::<()>::new();
+/// Struct for handling the execution of Calisp code
+/// If you want to use this as an library, use [`new`] and [`run`] functions
+pub struct CalispInterpreter {
+    input_file: String,
+    repl_env: Env,
+}
 
-    if rl.load_history(".calisp-history").is_err() {
-        eprintln!("No previous history.");
+impl CalispInterpreter {
+    /// Create new instance of [`CalispInterpreter`]
+    fn new(input_file: String, arguments: &Vec<std::string::String>) -> CalispInterpreter {
+        CalispInterpreter {
+            input_file: input_file,
+            repl_env: CalispInterpreter::new_env(arguments.to_vec()),
+        }
     }
 
-    let repl_env = env_new(None);
-    for (k, v) in core::ns() {
-        env_sets(&repl_env, k, v);
+    /// Create new environment for Calisp
+    fn new_env(arguments: Vec<String>) -> Env {
+        let repl_env = env_new(None);
+        for (k, v) in core::ns() {
+            env_sets(&repl_env, k, v);
+        }
+
+        env_sets(
+            &repl_env,
+            "*ARGV*",
+            list!(arguments.iter().map(|arg| Str(arg.to_string())).collect()),
+        );
+
+        let _ = rep("(def! *host-language* \"rust\")", &repl_env);
+        let _ = rep("(def! not (fn* (a) (if a false true)))", &repl_env);
+        let _ = rep(
+            "(def! load-file (fn* (f) (eval (read-string (str \"(do \" (slurp f) \"\nnil)\")))))",
+            &repl_env,
+        );
+        let _ = rep("(defmacro! cond (fn* (& xs) (if (> (count xs) 0) (list 'if (first xs) (if (> (count xs) 1) (nth xs 1) (throw \"odd number of forms to cond\")) (cons 'cond (rest (rest xs)))))))", &repl_env);
+
+        repl_env.clone()
     }
-    env_sets(&repl_env, "*ARGV*", list!(args.map(Str).collect()));
 
-    let _ = rep("(def! *host-language* \"rust\")", &repl_env);
-    let _ = rep("(def! not (fn* (a) (if a false true)))", &repl_env);
-    let _ = rep(
-        "(def! load-file (fn* (f) (eval (read-string (str \"(do \" (slurp f) \"\nnil)\")))))",
-        &repl_env,
-    );
-    let _ = rep("(defmacro! cond (fn* (& xs) (if (> (count xs) 0) (list 'if (first xs) (if (> (count xs) 1) (nth xs 1) (throw \"odd number of forms to cond\")) (cons 'cond (rest (rest xs)))))))", &repl_env);
-
-    if let Some(f) = arg1 {
-        match rep(&format!("(load-file \"{}\")", f), &repl_env) {
+    /// Load file in Calisp and eval it
+    pub fn run(&self) -> Result<String, CalispErr> {
+        match rep(
+            &format!("(load-file \"{}\")", self.input_file),
+            &self.repl_env,
+        ) {
             Ok(_) => std::process::exit(0),
             Err(e) => {
                 println!("Error: {}", format_error(e));
@@ -349,28 +383,89 @@ fn main() {
             }
         }
     }
-            
-            
-    let _ = rep("(println (str \"Calisp [\" *host-language* \"]\"))", &repl_env);
-    loop {
-        let readline = rl.readline("calisp> ");
-        match readline {
-            Ok(line) => {
-                rl.add_history_entry(&line);
-                rl.save_history(".calisp-history").unwrap();
-                if line.len() > 0 {
-                    match rep(&line, &repl_env) {
-                        Ok(out) => println!("{}", out),
-                        Err(e) => println!("Error: {}", format_error(e)),
+
+    /// Read code from the stdi
+    pub fn run_interactive(&self) {
+        let mut rl = Editor::<()>::new();
+
+        if rl.load_history(".calisp-history").is_err() {
+            eprintln!("No previous history.");
+        }
+
+        let _ = rep(
+            "(println (str \"Calisp [\" *host-language* \"]\"))",
+            &self.repl_env,
+        );
+        loop {
+            let readline = rl.readline("calisp interactive: ");
+            match readline {
+                Ok(line) => {
+                    rl.add_history_entry(&line);
+                    rl.save_history(".calisp-history").unwrap();
+                    if line.len() > 0 {
+                        match rep(&line, &self.repl_env) {
+                            Ok(out) => println!("{}", out),
+                            Err(e) => println!("Error: {}", format_error(e)),
+                        }
                     }
                 }
-            }
-            Err(ReadlineError::Interrupted) => break,
-            Err(ReadlineError::Eof) => break,
-            Err(err) => {
-                println!("Error: {:?}", err);
-                break;
+                Err(ReadlineError::Interrupted) => break,
+                Err(ReadlineError::Eof) => break,
+                Err(err) => {
+                    println!("Error: {:?}", err);
+                    break;
+                }
             }
         }
     }
+}
+
+extern crate clap;
+use clap::{crate_authors, crate_name, crate_version, App, Arg};
+
+/// This function is run in standalone mode
+/// Use `calisp interactive <additional arguments>` for an interactive mode
+fn main() {
+  let matches = App::new(crate_name!())
+    .version(crate_version!())
+    .author(crate_authors!())
+    .arg(
+      Arg::with_name("input_file")
+        .help("Specify input file to be read")
+        .short("i")
+        .long("input-file")
+        .value_name("FILE")
+        .takes_value(true),
+    )
+    .subcommand(App::new("interactive").about("Run calisp in interactive mode"))
+    .get_matches();
+
+  match matches.subcommand_name() {
+    Some("interactive") => {
+      CalispInterpreter::new(
+        "".to_string(),
+        &matches
+          .subcommand_matches("interactive")
+          .unwrap()
+          .args
+          .iter()
+          .map(|(key, _)| key.to_string())
+          .collect(),
+      )
+      .run_interactive();
+    }
+    _ => {
+      if let Some(input_file) = matches.value_of("input_file") {
+          CalispInterpreter::new(
+          input_file.to_string(),
+          &matches
+            .args
+            .iter()
+            .map(|(key, _)| key.to_string())
+            .collect(),
+        )
+              .run().unwrap();
+      }
+    }
+  }
 }
