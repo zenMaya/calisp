@@ -32,10 +32,12 @@ impl CalispVal {
                 }
             }
             Sym(s) => s.clone(),
-            List(l, _) => pr_seq(&**l, print_readably, "(", ")", " "),
-            Vector(l, _) => pr_seq(&**l, print_readably, "[", "]", " "),
+            List(l, _) => pr_seq(&l.read().unwrap(), print_readably, "(", ")", " "),
+            Vector(l, _) => pr_seq(&l.read().unwrap().to_vec(), print_readably, "[", "]", " "),
             Hash(hm, _) => {
                 let l: Vec<CalispVal> = hm
+                    .read()
+                    .unwrap()
                     .iter()
                     .flat_map(|(k, v)| vec![Str(k.to_string()), v.clone()])
                     .collect();
@@ -44,8 +46,8 @@ impl CalispVal {
             Func(f, _) => format!("#<fn {:?}>", f),
             CalispFunc {
                 ast: a, params: p, ..
-            } => format!("(fn* {} {})", p.pr_str(true), a.pr_str(true)),
-            Atom(a) => format!("(atom {})", a.borrow().pr_str(true)),
+            } => format!("(fn* {} {})", p.read().unwrap().pr_str(true), a.read().unwrap().pr_str(true)),
+            Atom(a) => format!("(atom {})", a.read().unwrap().pr_str(true)),
         }
     }
 }

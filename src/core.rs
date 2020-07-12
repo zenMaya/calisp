@@ -1,7 +1,6 @@
 use std::fs::File;
 use std::io::Read;
-use std::rc::Rc;
-use std::sync::Mutex;
+use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 extern crate rustyline;
@@ -57,11 +56,11 @@ fn symbol(a: CalispArgs) -> CalispRet {
 
 fn readline(a: CalispArgs) -> CalispRet {
     lazy_static! {
-        static ref RL: Mutex<Editor<()>> = Mutex::new(Editor::<()>::new());
+        static ref RL: RwLock<Editor<()>> = RwLock::new(Editor::<()>::new());
     }
 
     match a[0] {
-        Str(ref p) => match RL.lock().unwrap().readline(p) {
+        Str(ref p) => match RL.write().unwrap().readline(p) {
             Ok(mut line) => {
                 if line.ends_with('\n') {
                     line.pop();
@@ -99,7 +98,7 @@ fn time_ms(_a: CalispArgs) -> CalispRet {
 fn get(a: CalispArgs) -> CalispRet {
     match (a[0].clone(), a[1].clone()) {
         (Nil, _) => Ok(Nil),
-        (Hash(ref hm, _), Str(ref s)) => match hm.get(s) {
+        (Hash(ref hm, _), Str(ref s)) => match hm.read().unwrap().get(s) {
             Some(cv) => Ok(cv.clone()),
             None => Ok(Nil),
         },
@@ -109,35 +108,35 @@ fn get(a: CalispArgs) -> CalispRet {
 
 fn assoc(a: CalispArgs) -> CalispRet {
     match a[0] {
-        Hash(ref hm, _) => _assoc((**hm).clone(), a[1..].to_vec()),
+        Hash(ref hm, _) => _assoc((**hm).read().unwrap().clone(), a[1..].to_vec()),
         _ => error("assoc on non-Hash Map"),
     }
 }
 
 fn dissoc(a: CalispArgs) -> CalispRet {
     match a[0] {
-        Hash(ref hm, _) => _dissoc((**hm).clone(), a[1..].to_vec()),
+        Hash(ref hm, _) => _dissoc((**hm).read().unwrap().clone(), a[1..].to_vec()),
         _ => error("dissoc on non-Hash Map"),
     }
 }
 
 fn contains_q(a: CalispArgs) -> CalispRet {
     match (a[0].clone(), a[1].clone()) {
-        (Hash(ref hm, _), Str(ref s)) => Ok(Bool(hm.contains_key(s))),
+        (Hash(ref hm, _), Str(ref s)) => Ok(Bool(hm.read().unwrap().contains_key(s))),
         _ => error("illegal get args"),
     }
 }
 
 fn keys(a: CalispArgs) -> CalispRet {
     match a[0] {
-        Hash(ref hm, _) => Ok(list!(hm.keys().map(|k| { Str(k.to_string()) }).collect())),
+        Hash(ref hm, _) => Ok(list!(hm.read().unwrap().keys().map(|k| { Str(k.to_string()) }).collect())),
         _ => error("keys requires Hash Map"),
     }
 }
 
 fn vals(a: CalispArgs) -> CalispRet {
     match a[1] {
-        Hash(ref hm, _) => Ok(list!(hm.values().map(|v| { v.clone() }).collect())),
+        Hash(ref hm, _) => Ok(list!(hm.read().unwrap().values().map(|v| { v.clone() }).collect())),
         _ => error("vals requires Hash Map"),
     }
 }
@@ -146,7 +145,7 @@ fn cons(a: CalispArgs) -> CalispRet {
     match a[1].clone() {
         List(v, _) | Vector(v, _) => {
             let mut new_v = vec![a[0].clone()];
-            new_v.extend_from_slice(&v);
+            new_v.extend_from_slice(&v.read().unwrap());
             Ok(list!(new_v.to_vec()))
         }
         _ => error("cons expects seq as second arg"),
@@ -157,7 +156,7 @@ fn concat(a: CalispArgs) -> CalispRet {
     let mut new_v = vec![];
     for seq in a.iter() {
         match seq {
-            List(v, _) | Vector(v, _) => new_v.extend_from_slice(v),
+            List(v, _) | Vector(v, _) => new_v.extend_from_slice(&v.read().unwrap()),
             _ => return error("non-seq passed to concat"),
         }
     }
@@ -167,10 +166,10 @@ fn concat(a: CalispArgs) -> CalispRet {
 fn nth(a: CalispArgs) -> CalispRet {
     match (a[0].clone(), a[1].clone()) {
         (List(seq, _), Int(idx)) | (Vector(seq, _), Int(idx)) => {
-            if seq.len() <= idx as usize {
+            if seq.read().unwrap().len() <= idx as usize {
                 return error("nth: index out of range");
             }
-            Ok(seq[idx as usize].clone())
+            Ok(seq.read().unwrap()[idx as usize].clone())
         }
         _ => error("invalid args to nth"),
     }
@@ -178,8 +177,8 @@ fn nth(a: CalispArgs) -> CalispRet {
 
 fn first(a: CalispArgs) -> CalispRet {
     match a[0].clone() {
-        List(ref seq, _) | Vector(ref seq, _) if seq.len() == 0 => Ok(Nil),
-        List(ref seq, _) | Vector(ref seq, _) => Ok(seq[0].clone()),
+        List(ref seq, _) | Vector(ref seq, _) if seq.read().unwrap().len() == 0 => Ok(Nil),
+        List(ref seq, _) | Vector(ref seq, _) => Ok(seq.read().unwrap()[0].clone()),
         Nil => Ok(Nil),
         _ => error("invalid args to car (first)"),
     }
@@ -188,8 +187,8 @@ fn first(a: CalispArgs) -> CalispRet {
 fn rest(a: CalispArgs) -> CalispRet {
     match a[0].clone() {
         List(ref seq, _) | Vector(ref seq, _) => {
-            if seq.len() > 1 {
-                Ok(list!(seq[1..].to_vec()))
+            if seq.read().unwrap().len() > 1 {
+                Ok(list!(seq.read().unwrap()[1..].to_vec()))
             } else {
                 Ok(list![])
             }
@@ -204,7 +203,7 @@ fn apply(a: CalispArgs) -> CalispRet {
         List(ref v, _) | Vector(ref v, _) => {
             let f = &a[0];
             let mut fargs = a[1..a.len() - 1].to_vec();
-            fargs.extend_from_slice(&v);
+            fargs.extend_from_slice(&v.read().unwrap());
             f.apply(fargs)
         }
         _ => error("apply called with non-seq"),
@@ -215,7 +214,7 @@ fn map(a: CalispArgs) -> CalispRet {
     match a[1] {
         List(ref v, _) | Vector(ref v, _) => {
             let mut res = vec![];
-            for cv in v.iter() {
+            for cv in v.read().unwrap().iter() {
                 res.push(a[0].apply(vec![cv.clone()])?)
             }
             Ok(list!(res))
@@ -225,24 +224,24 @@ fn map(a: CalispArgs) -> CalispRet {
 }
 
 fn conj(a: CalispArgs) -> CalispRet {
-    match a[0] {
-        List(ref v, _) => {
+    match &a[0] {
+        List(v, _) => {
             let sl = a[1..]
                 .iter()
                 .rev()
                 .map(|a| a.clone())
                 .collect::<Vec<CalispVal>>();
-            Ok(list!([&sl[..], v].concat()))
+            Ok(list!([&sl[..], &v.read().unwrap()].concat()))
         }
-        Vector(ref v, _) => Ok(vector!([v, &a[1..]].concat())),
+        Vector(v, _) => Ok(vector!([&v.read().unwrap(), &a[1..]].concat())),
         _ => error("conj called with non-seq"),
     }
 }
 
 fn seq(a: CalispArgs) -> CalispRet {
-    match a[0] {
-        List(ref v, _) | Vector(ref v, _) if v.len() == 0 => Ok(Nil),
-        List(ref v, _) | Vector(ref v, _) => Ok(list!(v.to_vec())),
+    match &a[0] {
+        List(v, _) | Vector(v, _) if v.read().unwrap().len() == 0 => Ok(Nil),
+        List(v, _) | Vector(v, _) => Ok(list!(v.read().unwrap().to_vec())),
         Str(ref s) if s.len() == 0 => Ok(Nil),
         Str(ref s) if !a[0].keyword_q() => {
             Ok(list!(s.chars().map(|c| { Str(c.to_string()) }).collect()))

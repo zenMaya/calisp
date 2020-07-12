@@ -29,10 +29,10 @@ pub fn env_bind(
     let env = env_new(outer);
     match mbinds {
         List(binds, _) | Vector(binds, _) => {
-            for (i, b) in binds.iter().enumerate() {
+            for (i, b) in binds.read().unwrap().iter().enumerate() {
                 match b {
                     Sym(s) if s == "&" => {
-                        env_set(&env, binds[i + 1].clone(), list!(exprs[i..].to_vec()))?;
+                        env_set(&env, binds.read().unwrap()[i + 1].clone(), list!(exprs[i..].to_vec()))?;
                         break;
                     }
                     _ => {
