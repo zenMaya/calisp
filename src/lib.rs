@@ -277,7 +277,7 @@ fn eval(mut ast: CalispVal, mut env: Env) -> CalispRet {
           }
           Sym(ref a0sym) if a0sym == "eval" => {
             ast = eval(l.read().unwrap()[1].clone(), env.clone())?;
-            while let Some(ref e) = env.clone().outer {
+            while let Some(ref e) = env.clone().read().unwrap().outer {
               env = e.clone();
             }
             continue 'tco;

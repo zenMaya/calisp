@@ -1,7 +1,7 @@
 [package]
 name = "calisp"
 description = "MAL clone, lisp language"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Jáchym Tomášek <jachym.tomasek@tutanota.com>"]
 edition = "2018"
 license = "MPL-2.0"

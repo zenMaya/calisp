@@ -1,5 +1,4 @@
 use regex::{Captures, Regex};
-use std::rc::Rc;
 
 use crate::types::CalispErr::ErrString;
 use crate::types::CalispVal::{Bool, Int, List, Nil, Str, Sym, Vector};

@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::Read;
-use std::sync::{Arc, RwLock};
+use std::sync::{RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 extern crate rustyline;
@@ -16,6 +16,7 @@ use crate::types::CalispVal::{
 use crate::types::{
     CalispArgs, CalispRet, CalispVal, _assoc, _dissoc, atom, error, func, hash_map,
 };
+use crate::interop::CalispInterop;
 
 macro_rules! fn_t_int_int {
     ($ret:ident, $fn:expr) => {{
@@ -351,5 +352,8 @@ pub fn ns() -> Vec<(&'static str, CalispVal)> {
         ("reset!", func(|a| a[0].reset_bang(&a[1]))),
         ("swap!", func(|a| a[0].swap_bang(&a[1..].to_vec()))),
         ("exit", func(exit)),
+        ("rust-fn-eval", func(CalispInterop::eval_fn)),
+        ("rust-var-set", func(CalispInterop::set_var)),
+        ("rust-var-get", func(CalispInterop::get_var)),
     ]
 }
