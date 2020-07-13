@@ -18,7 +18,7 @@ pub enum CalispVal {
     List(Arc<RwLock<Vec<CalispVal>>>, Arc<RwLock<CalispVal>>),
     Vector(Arc<RwLock<Vec<CalispVal>>>, Arc<RwLock<CalispVal>>),
     Hash(Arc<RwLock<FnvHashMap<String, CalispVal>>>, Arc<RwLock<CalispVal>>),
-    Func(fn(CalispArgs) -> CalispRet, Arc<RwLock<CalispVal>>),
+    Func(fn(CalispArgs) -> CalispRet, Arc<RwLock<CalispVal>>, String),
     CalispFunc {
         eval: fn(ast: CalispVal, env: Env) -> CalispRet,
         ast: Arc<RwLock<CalispVal>>,
@@ -26,6 +26,7 @@ pub enum CalispVal {
         params: Arc<RwLock<CalispVal>>,
         is_macro: bool,
         meta: Arc<RwLock<CalispVal>>,
+        docstring: String,
     },
     Atom(Arc<RwLock<CalispVal>>),
 }
@@ -101,7 +102,7 @@ impl CalispVal {
 
     pub fn apply(&self, args: CalispArgs) -> CalispRet {
         match *self {
-            Func(f, _) => f(args),
+            Func(f, _, _) => f(args),
             CalispFunc {
                 eval,
                 ref ast,
@@ -159,7 +160,7 @@ impl CalispVal {
     pub fn get_meta(&self) -> CalispRet {
         match self {
             List(_, meta) | Vector(_, meta) | Hash(_, meta) => Ok((&**meta).read().unwrap().clone()),
-            Func(_, meta) => Ok((&**meta).read().unwrap().clone()),
+            Func(_, meta, _) => Ok((&**meta).read().unwrap().clone()),
             CalispFunc { meta, .. } => Ok((&**meta).read().unwrap().clone()),
             _ => error("meta not supported by type"),
         }
@@ -170,7 +171,7 @@ impl CalispVal {
             List(_, ref mut meta)
             | Vector(_, ref mut meta)
             | Hash(_, ref mut meta)
-            | Func(_, ref mut meta)
+            | Func(_, ref mut meta, _)
             | CalispFunc { ref mut meta, .. } => {
                 *meta = Arc::new(RwLock::new((&*new_meta).clone()));
             }
@@ -199,8 +200,8 @@ impl PartialEq for CalispVal {
     }
 }
 
-pub fn func(f: fn(CalispArgs) -> CalispRet) -> CalispVal {
-    Func(f, Arc::new(RwLock::new(Nil)))
+pub fn func(f: fn(CalispArgs) -> CalispRet, docstring: String) -> CalispVal {
+    Func(f, Arc::new(RwLock::new(Nil)), docstring)
 }
 
 pub fn _assoc(mut hm: FnvHashMap<String, CalispVal>, kvs: CalispArgs) -> CalispRet {

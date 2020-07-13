@@ -42,49 +42,49 @@ fn read(str: &str) -> CalispRet {
 
 /// Handle quasiquotes `\``
 fn quasiquote(ast: &CalispVal) -> CalispVal {
-    match ast {
-        List(v, _) | Vector(v, _) if v.read().unwrap().len() > 0 => {
-            let a0 = &v.read().unwrap()[0];
-            match a0 {
-                Sym(ref s) if s == "unquote" => v.read().unwrap()[1].clone(),
-                List(ref v0, _) | Vector(ref v0, _) if v0.read().unwrap().len() > 0 => {
-                    match v0.read().unwrap()[0] {
-                        Sym(ref s) if s == "splice-unquote" => list![
-                            Sym("concat".to_string()),
-                            v0.read().unwrap()[1].clone(),
-                            quasiquote(&list!(v.read().unwrap()[1..].to_vec()))
-                        ],
-                        _ => list![
-                            Sym("cons".to_string()),
-                            quasiquote(&a0),
-                            quasiquote(&list!(v.read().unwrap()[1..].to_vec()))
-                        ],
-                    }
-                },
-                _ => list![
-                    Sym("cons".to_string()),
-                    quasiquote(a0),
-                    quasiquote(&list!(v.read().unwrap()[1..].to_vec()))
-                ],
-            }
-        },
-        _ => list![Sym("quote".to_string()), ast.clone()],
+  match ast {
+    List(v, _) | Vector(v, _) if v.read().unwrap().len() > 0 => {
+      let a0 = &v.read().unwrap()[0];
+      match a0 {
+        Sym(ref s) if s == "unquote" => v.read().unwrap()[1].clone(),
+        List(ref v0, _) | Vector(ref v0, _) if v0.read().unwrap().len() > 0 => {
+          match v0.read().unwrap()[0] {
+            Sym(ref s) if s == "splice-unquote" => list![
+              Sym("concat".to_string()),
+              v0.read().unwrap()[1].clone(),
+              quasiquote(&list!(v.read().unwrap()[1..].to_vec()))
+            ],
+            _ => list![
+              Sym("cons".to_string()),
+              quasiquote(&a0),
+              quasiquote(&list!(v.read().unwrap()[1..].to_vec()))
+            ],
+          }
+        }
+        _ => list![
+          Sym("cons".to_string()),
+          quasiquote(a0),
+          quasiquote(&list!(v.read().unwrap()[1..].to_vec()))
+        ],
+      }
     }
+    _ => list![Sym("quote".to_string()), ast.clone()],
+  }
 }
 
 /// Check if call is macro call
 fn is_macro_call(ast: &CalispVal, env: &Env) -> Option<(CalispVal, CalispArgs)> {
   match ast {
-      List(v, _) => match v.read().unwrap()[0] {
-        Sym(ref s) => match env_find(env, s) {
-          Some(e) => match env_get(&e, &v.read().unwrap()[0]) {
-            Ok(f @ CalispFunc { is_macro: true, .. }) => Some((f, v.read().unwrap()[1..].to_vec())),
-            _ => None,
-          },
+    List(v, _) => match v.read().unwrap()[0] {
+      Sym(ref s) => match env_find(env, s) {
+        Some(e) => match env_get(&e, &v.read().unwrap()[0]) {
+          Ok(f @ CalispFunc { is_macro: true, .. }) => Some((f, v.read().unwrap()[1..].to_vec())),
           _ => None,
         },
         _ => None,
-      }
+      },
+      _ => None,
+    },
     _ => None,
   }
 }
@@ -145,7 +145,6 @@ fn eval(mut ast: CalispVal, mut env: Env) -> CalispRet {
         if l.read().unwrap().len() == 0 {
           return Ok(ast);
         }
-          
         match macroexpand(ast.clone(), &env) {
           (true, Ok(new_ast)) => {
             ast = new_ast;
@@ -160,9 +159,11 @@ fn eval(mut ast: CalispVal, mut env: Env) -> CalispRet {
         }
         let a0 = &l.read().unwrap()[0];
         match a0 {
-            Sym(ref a0sym) if a0sym == "def!" => {
-            env_set(&env, l.read().unwrap()[1].clone(), eval(l.read().unwrap()[2].clone(), env.clone())?)
-          }
+          Sym(ref a0sym) if a0sym == "def!" => env_set(
+            &env,
+            l.read().unwrap()[1].clone(),
+            eval(l.read().unwrap()[2].clone(), env.clone())?,
+          ),
           Sym(ref a0sym) if a0sym == "let*" => {
             env = env_new(Some(env.clone()));
             let (a1, a2) = (l.read().unwrap()[1].clone(), l.read().unwrap()[2].clone());
@@ -193,7 +194,15 @@ fn eval(mut ast: CalispVal, mut env: Env) -> CalispRet {
           }
           Sym(ref a0sym) if a0sym == "defmacro!" => {
             let (a1, a2) = (l.read().unwrap()[1].clone(), l.read().unwrap()[2].clone());
-            let r = eval(a2, env.clone())?;
+            let mut docstring = String::default();
+            let a3 = match a2 {
+              Str(s) => {
+                docstring = s;
+                l.read().unwrap()[3].clone()
+              }
+              _ => a2,
+            };
+            let r = eval(a3, env.clone())?;
             match r {
               CalispFunc {
                 eval,
@@ -211,37 +220,45 @@ fn eval(mut ast: CalispVal, mut env: Env) -> CalispRet {
                   params: params.clone(),
                   is_macro: true,
                   meta: Arc::new(RwLock::new(Nil)),
+                  docstring: docstring,
                 },
               )?),
               _ => error("set_macro on non-function"),
             }
           }
-          Sym(ref a0sym) if a0sym == "macroexpand" => match macroexpand(l.read().unwrap()[1].clone(), &env) {
-            (_, Ok(new_ast)) => Ok(new_ast),
-            (_, e) => return e,
-          },
-          Sym(ref a0sym) if a0sym == "try*" => match eval(l.read().unwrap()[1].clone(), env.clone()) {
-            Err(ref e) if l.read().unwrap().len() >= 3 => {
-              let exc = match e {
-                ErrCalispVal(cv) => cv.clone(),
-                ErrString(s) => Str(s.to_string()),
-              };
-              match l.read().unwrap()[2].clone() {
-                List(c, _) => {
-                  let catch_env = env_bind(
-                    Some(env.clone()),
-                    list!(vec![c.read().unwrap()[1].clone()]),
-                    vec![exc],
-                  )?;
-                  eval(c.read().unwrap()[2].clone(), catch_env)
-                }
-                _ => error("invalid catch block"),
-              }
+          Sym(ref a0sym) if a0sym == "macroexpand" => {
+            match macroexpand(l.read().unwrap()[1].clone(), &env) {
+              (_, Ok(new_ast)) => Ok(new_ast),
+              (_, e) => return e,
             }
-            res => res,
-          },
+          }
+          Sym(ref a0sym) if a0sym == "try*" => {
+            match eval(l.read().unwrap()[1].clone(), env.clone()) {
+              Err(ref e) if l.read().unwrap().len() >= 3 => {
+                let exc = match e {
+                  ErrCalispVal(cv) => cv.clone(),
+                  ErrString(s) => Str(s.to_string()),
+                };
+                match l.read().unwrap()[2].clone() {
+                  List(c, _) => {
+                    let catch_env = env_bind(
+                      Some(env.clone()),
+                      list!(vec![c.read().unwrap()[1].clone()]),
+                      vec![exc],
+                    )?;
+                    eval(c.read().unwrap()[2].clone(), catch_env)
+                  }
+                  _ => error("invalid catch block"),
+                }
+              }
+              res => res,
+            }
+          }
           Sym(ref a0sym) if a0sym == "do" => {
-            match eval_ast(&list!(l.read().unwrap()[1..l.read().unwrap().len() - 1].to_vec()), &env)? {
+            match eval_ast(
+              &list!(l.read().unwrap()[1..l.read().unwrap().len() - 1].to_vec()),
+              &env,
+            )? {
               List(_, _) => {
                 ast = l.read().unwrap().last().unwrap_or(&Nil).clone();
                 continue 'tco;
@@ -266,13 +283,22 @@ fn eval(mut ast: CalispVal, mut env: Env) -> CalispRet {
           }
           Sym(ref a0sym) if a0sym == "fn*" => {
             let (a1, a2) = (l.read().unwrap()[1].clone(), l.read().unwrap()[2].clone());
+            let mut docstring = String::default();
+            let a3 = match a2 {
+              Str(s) => {
+                docstring = s;
+                l.read().unwrap()[3].clone()
+              }
+              _ => a2,
+            };
             Ok(CalispFunc {
               eval: eval,
-              ast: Arc::new(RwLock::new(a2)),
+              ast: Arc::new(RwLock::new(a3)),
               env: env,
               params: Arc::new(RwLock::new(a1)),
               is_macro: false,
               meta: Arc::new(RwLock::new(Nil)),
+              docstring: docstring,
             })
           }
           Sym(ref a0sym) if a0sym == "eval" => {
@@ -287,7 +313,7 @@ fn eval(mut ast: CalispVal, mut env: Env) -> CalispRet {
               let ref f = el.read().unwrap()[0].clone();
               let args = el.read().unwrap()[1..].to_vec();
               match f {
-                Func(_, _) => f.apply(args),
+                Func(_, _, _) => f.apply(args),
                 CalispFunc {
                   ast: mast,
                   env: menv,

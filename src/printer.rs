@@ -43,7 +43,7 @@ impl CalispVal {
                     .collect();
                 pr_seq(&l, print_readably, "{", "}", " ")
             }
-            Func(f, _) => format!("#<fn {:?}>", f),
+            Func(f, _, docstring) => format!("#<fn {:?}> {}", f, docstring),
             CalispFunc {
                 ast: a, params: p, ..
             } => format!("(fn* {} {})", p.read().unwrap().pr_str(true), a.read().unwrap().pr_str(true)),

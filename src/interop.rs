@@ -15,11 +15,11 @@ pub struct CalispInterop {}
 
 impl CalispInterop {
   /// Register rust function that can be called from within Calisp
-  pub fn register_fn(f_name: String, f: fn(CalispArgs) -> CalispRet) {
+  pub fn register_fn(f_name: String, f: fn(CalispArgs) -> CalispRet, docstring: String) {
     FUNCTIONS
       .write()
       .unwrap()
-      .insert(f_name, Func(f, Arc::new(RwLock::new(Nil))));
+      .insert(f_name, Func(f, Arc::new(RwLock::new(Nil)), docstring));
   }
 
   pub(crate) fn eval_fn(a: CalispArgs) -> CalispRet {
