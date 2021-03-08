@@ -17,7 +17,7 @@ name = "calisp"
 crate-type = ["lib"]
 
 [dependencies]
-rustyline = "5.0.3"
+rustyline = "8.0.0"
 clap = "2.33.1"
 lazy_static = "1.4.0"
 
